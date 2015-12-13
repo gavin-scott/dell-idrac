@@ -639,6 +639,9 @@ class Puppet::Provider::Importtemplatexml <  Puppet::Provider
     unless @boot_device =~ /^NONE/i
       if net_config.get_partitions('PXE').first.nil?
         boot_seq = ['HardDisk.List.1-1'].join(', ')
+      elsif true
+        # TODO: need to still add PXE for non-Intel
+        boot_seq = ['HardDisk.List.1-1'].join(', ')
       else
         boot_seq = [net_config.get_partitions('PXE').first.fqdd, 'HardDisk.List.1-1'].join(', ')
       end
