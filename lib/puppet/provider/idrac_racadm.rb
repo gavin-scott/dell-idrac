@@ -2,16 +2,21 @@ require "pathname"
 begin
   require "puppet_x/puppetlabs/transport"
 rescue LoadError # WORK_AROUND #14073 and #7788
-  mod = Puppet::Module.find("transport", Puppet[:environment].to_s)
-  require File.join mod.path, "lib/puppet_x/puppetlabs/transport" if mod
+  begin
+    mod = Puppet::Module.find("transport", Puppet[:environment].to_s)
+    require File.join mod.path, "lib/puppet_x/puppetlabs/transport" if mod
+  rescue
+      # This would happen in CI scenario, ignore it since we anyways will mock racadm out
+  end
 end
 begin
   require "puppet_x/puppetlabs/transport/racadm"
-rescue LoadError # WORK_AROUND #14073 and #7788
-  mod = Puppet::Module.find("transport", Puppet[:environment].to_s)
+rescue # WORK_AROUND #14073 and #7788
   begin
+    mod = Puppet::Module.find("transport", Puppet[:environment].to_s)
     require File.join mod.path, "lib/puppet_x/puppetlabs/transport/racadm" if mod
-  rescue LoadError  # This would happen in CI scenario, ignore it since we anyways will mock racadm out
+  rescue
+    # This would happen in CI scenario, ignore it since we anyways will mock racadm out
   end
 end
 
