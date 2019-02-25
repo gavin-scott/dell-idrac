@@ -27,15 +27,16 @@ class Puppet::Provider::Importtemplatexml <  Puppet::Provider
       @resource[:raid_configuration] = fc630_raid_configuration
     end
 
-    if @boot_device =~ /LOCAL_FLASH_STORAGE/i
-      if boss_controller
-        Puppet.debug("Found BOSS controller: " + boss_controller.to_s + " including RAID config for Local Flash Storage.")
-      elsif get_satadom
-        Puppet.debug("Found SATADOM for Local Flash Storage: " + get_satadom.to_s)
-      else
-        raise("No Local Flash Storage Found.  BOSS controller with 2 disks or SATADOM required.")
-      end
-    end
+    # HACK: needs to be updated for UEFi it seems like
+    # if @boot_device =~ /LOCAL_FLASH_STORAGE/i
+    #   if boss_controller
+    #     Puppet.debug("Found BOSS controller: " + boss_controller.to_s + " including RAID config for Local Flash Storage.")
+    #   elsif get_satadom
+    #     Puppet.debug("Found SATADOM for Local Flash Storage: " + get_satadom.to_s)
+    #   else
+    #     raise("No Local Flash Storage Found.  BOSS controller with 2 disks or SATADOM required.")
+    #   end
+    # end
   end
 
   def importtemplatexml
@@ -214,10 +215,13 @@ class Puppet::Provider::Importtemplatexml <  Puppet::Provider
       #First check for BOSS device, if no BOSS device, we have to have SATADOM or fail
       storage_fqdd = boss_controller
       storage_fqdd ||= get_satadom
-      raise("No valid storage controller. Local flash storage boot requires BOSS or SATADOM storage.") unless storage_fqdd
-      Puppet.info("Boot device controller is: " + storage_fqdd)
+      # HACK: skip
+      # raise("No valid storage controller. Local flash storage boot requires BOSS or SATADOM storage.") unless storage_fqdd
+      # Puppet.info("Boot device controller is: " + storage_fqdd)
       changes["partial"].deep_merge!("BIOS.Setup.1-1" => {"InternalSdCard" => "Off"}) if is_sd_card?
-      changes["partial"].deep_merge!("BIOS.Setup.1-1" => {"HddSeq" => storage_fqdd})
+
+      # No HddSeq for UEFi
+      # changes["partial"].deep_merge!("BIOS.Setup.1-1" => {"HddSeq" => storage_fqdd})
     end
 
     if @boot_device =~ /HD/i
@@ -271,7 +275,7 @@ class Puppet::Provider::Importtemplatexml <  Puppet::Provider
       changes["remove"]["attributes"]["BIOS.Setup.1-1"] ||= []
       changes["remove"]["attributes"]["BIOS.Setup.1-1"] << "BiosBootSeq"
     else
-      changes["partial"]["BIOS.Setup.1-1"]["BootMode"] = "Bios"
+      changes["partial"]["BIOS.Setup.1-1"]["BootMode"] = "Uefi"
     end
     changes
   end
@@ -358,19 +362,21 @@ class Puppet::Provider::Importtemplatexml <  Puppet::Provider
       @changes.deep_merge!(get_raid_config_changes(xml_base)) if attempt == 0
     end
 
-    %w(BiosBootSeq HddSeq).each do |attr|
-      existing_attr_val = find_current_boot_attribute(attr.downcase.to_sym)
-      requested_val = @changes['partial']['BIOS.Setup.1-1'][attr]
-      message = "Attribute: %s, Existing value: %s, Requested value: %s" % [attr, existing_attr_val, requested_val]
-      Puppet.debug(message)
-      if existing_attr_val && requested_val
-        seq_diff = requested_val.delete(' ').split(',').zip(existing_attr_val.delete(' ').split(',')).select{|new_val, exist_val| new_val != exist_val}
-        #If tearing down, the HDD will already be removed from the boot sequence
-        if seq_diff.size ==0 || @resource[:ensure] == :teardown
-          @changes['partial']['BIOS.Setup.1-1'].delete(attr)
-        end
-      end
-    end
+    # HACK: no boot seq for UEFi
+    #
+    # %w(BiosBootSeq HddSeq).each do |attr|
+    #   existing_attr_val = find_current_boot_attribute(attr.downcase.to_sym)
+    #   requested_val = @changes['partial']['BIOS.Setup.1-1'][attr]
+    #   message = "Attribute: %s, Existing value: %s, Requested value: %s" % [attr, existing_attr_val, requested_val]
+    #   Puppet.debug(message)
+    #   if existing_attr_val && requested_val
+    #     seq_diff = requested_val.delete(' ').split(',').zip(existing_attr_val.delete(' ').split(',')).select{|new_val, exist_val| new_val != exist_val}
+    #     #If tearing down, the HDD will already be removed from the boot sequence
+    #     if seq_diff.size ==0 || @resource[:ensure] == :teardown
+    #       @changes['partial']['BIOS.Setup.1-1'].delete(attr)
+    #     end
+    #   end
+    # end
 
     # If we are tearing down and there are nonraid volumes, we need to make them raid volumes to
     # be able to boot from this controller again
@@ -940,7 +946,8 @@ class Puppet::Provider::Importtemplatexml <  Puppet::Provider
     end
     #Don't mess with the boot order if the target_boot_device = none
     unless @boot_device =~ /^NONE/i
-      config['partial']['BIOS.Setup.1-1'] = {'BiosBootSeq'=> "HardDisk.List.1-1"}
+      # HACK: not for uefi
+      # config['partial']['BIOS.Setup.1-1'] = {'BiosBootSeq'=> "HardDisk.List.1-1"}
     end
     net_config.cards.each do |card|
       card.interfaces.each do |interface|
@@ -1007,6 +1014,9 @@ class Puppet::Provider::Importtemplatexml <  Puppet::Provider
             if partition['networkObjects'] && !partition['networkObjects'].find { |obj| obj['type'] =='PXE' }.nil?
               changes['LegacyBootProto'] = 'PXE'
             end
+
+            # DISABLE PXE FOR TESTING UEFI
+            changes['LegacyBootProto'] = 'NONE'
           end
         end
       end
